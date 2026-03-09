@@ -59,6 +59,14 @@ RenderingContextDriver *RenderingNativeSurfaceX11::create_rendering_context(cons
 	return nullptr;
 }
 
+void *RenderingNativeSurfaceX11::get_native_id() const {
+#if defined(VULKAN_ENABLED)
+	return (void *)window;
+#else
+	return nullptr;
+#endif
+}
+
 RenderingNativeSurfaceX11::RenderingNativeSurfaceX11() {
 	// Does nothing.
 }

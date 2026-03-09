@@ -59,6 +59,14 @@ RenderingContextDriver *RenderingNativeSurfaceWayland::create_rendering_context(
 	return nullptr;
 }
 
+void *RenderingNativeSurfaceWayland::get_native_id() const {
+#if defined(VULKAN_ENABLED)
+	return (void *)surface;
+#else
+	return nullptr;
+#endif
+}
+
 RenderingNativeSurfaceWayland::RenderingNativeSurfaceWayland() {
 	// Does nothing.
 }

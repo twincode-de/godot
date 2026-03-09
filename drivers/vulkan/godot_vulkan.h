@@ -37,3 +37,15 @@
 #define VK_NO_STDINT_H
 #include <vulkan/vulkan.h>
 #endif
+
+// The Vulkan headers may pull in platform-specific headers (Xlib, wayland, etc)
+// when the corresponding VK_USE_PLATFORM_* macros are defined. On Linux the
+// Xlib headers define a number of common macros such as `Font` or
+// `CursorShape` that conflict with Godot symbols. Undefine those here so that
+// any file including godot_vulkan.h won’t suffer from macro pollution.
+#ifdef Font
+#undef Font
+#endif
+#ifdef CursorShape
+#undef CursorShape
+#endif

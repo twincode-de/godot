@@ -57,6 +57,8 @@ public:
 		return display;
 	}
 
+	void *get_native_id() const override;
+
 	RenderingContextDriver *create_rendering_context(const String &p_driver_name) override;
 
 	RenderingNativeSurfaceX11();

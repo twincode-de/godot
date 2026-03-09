@@ -35,6 +35,13 @@
 #include "scene/resources/texture.h"
 #include "servers/text_server.h"
 
+// Some platform headers (e.g. X11 via Vulkan) define a macro named
+// `Font` which interferes with the class declaration below. Undefine it
+// early so the class name can be used safely.
+#ifdef Font
+#undef Font
+#endif
+
 class TextLine;
 class TextParagraph;
 
