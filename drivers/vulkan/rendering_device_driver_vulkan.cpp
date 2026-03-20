@@ -3070,7 +3070,7 @@ void RenderingDeviceDriverVulkan::PresentableSwapChain::release() {
 
 	if (vk_swapchain != VK_NULL_HANDLE) {
 #if defined(SWAPPY_FRAME_PACING_ENABLED)
-		if (swappy_frame_pacer_enable) {
+		if (device_driver->swappy_frame_pacer_enable) {
 			// Swappy has a bug where the ANativeWindow will be leaked if we call
 			// SwappyVk_destroySwapchain, so we must release it by hand.
 			SwappyVk_setWindow(device_driver->vk_device, vk_swapchain, nullptr);
@@ -3449,8 +3449,8 @@ Error RenderingDeviceDriverVulkan::PresentableSwapChain::resize(CommandQueueID p
 	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, ERR_CANT_CREATE, string_VkResult(err));
 
 #if defined(SWAPPY_FRAME_PACING_ENABLED)
-	if (swappy_frame_pacer_enable) {
-		SwappyVk_initAndGetRefreshCycleDuration(get_jni_env(), static_cast<OS_Android *>(OS::get_singleton())->get_godot_java()->get_activity(), physical_device,
+	if (device_driver->swappy_frame_pacer_enable) {
+		SwappyVk_initAndGetRefreshCycleDuration(get_jni_env(), static_cast<OS_Android *>(OS::get_singleton())->get_godot_java()->get_activity(), device_driver->physical_device,
 				device_driver->vk_device, vk_swapchain, &refresh_duration);
 		SwappyVk_setWindow(device_driver->vk_device, vk_swapchain, static_cast<OS_Android *>(OS::get_singleton())->get_native_window());
 		SwappyVk_setSwapIntervalNS(device_driver->vk_device, vk_swapchain, refresh_duration);
@@ -3461,7 +3461,7 @@ Error RenderingDeviceDriverVulkan::PresentableSwapChain::resize(CommandQueueID p
 			AUTO_FPS_AUTO_PIPELINE,
 		};
 
-		switch (swappy_mode) {
+		switch (device_driver->swappy_mode) {
 			case PIPELINE_FORCED_ON:
 				SwappyVk_setAutoSwapInterval(true);
 				SwappyVk_setAutoPipelineMode(true);
@@ -3894,9 +3894,10 @@ void RenderingDeviceDriverVulkan::swap_chain_set_max_fps(SwapChainID p_swap_chai
 	}
 
 	SwapChain *swap_chain = (SwapChain *)(p_swap_chain.id);
-	if (swap_chain->vk_swapchain != VK_NULL_HANDLE) {
+	const VkSwapchainKHR vk_swapchain = swap_chain->get_swapchain_handle();
+	if (vk_swapchain != VK_NULL_HANDLE) {
 		const uint64_t max_time = p_max_fps > 0 ? uint64_t((1000.0 * 1000.0 * 1000.0) / p_max_fps) : 0;
-		SwappyVk_setSwapIntervalNS(vk_device, swap_chain->vk_swapchain, MAX(swap_chain->refresh_duration, max_time));
+		SwappyVk_setSwapIntervalNS(vk_device, vk_swapchain, MAX(swap_chain->get_refresh_duration(), max_time));
 	}
 #endif
 }

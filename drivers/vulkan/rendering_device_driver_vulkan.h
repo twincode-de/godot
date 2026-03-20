@@ -389,6 +389,10 @@ private:
 	public:
 		virtual VkSwapchainKHR get_swapchain_handle() const { return VK_NULL_HANDLE; }
 
+#ifdef ANDROID_ENABLED
+		uint64_t get_refresh_duration() const { return refresh_duration; }
+#endif
+
 		RenderingContextDriver::SurfaceID get_surface() const { return surface; }
 
 		VkFormat get_format() const { return format; }
