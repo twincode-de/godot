@@ -103,9 +103,26 @@ Vector<EGLint> GLManagerAndroid::_get_platform_context_attribs() const {
 	return ret;
 }
 
+bool GLManagerAndroid::validate_driver() const {
+	void *handle = dlopen("libGLESv3.so", RTLD_LOCAL);
+	if (handle == nullptr) {
+		CRASH_NOW_MSG("Unable to open libGLESv3.so");
+	}
+	PFNGLGETSTRINGPROC getStringProc = (PFNGLGETSTRINGPROC)dlsym(handle, "glGetString");
+	ERR_FAIL_COND_V_MSG(getStringProc == nullptr, false, "Unable to load glGetString symbol");
+
+	const String rendering_device_name = String::utf8((const char *)getStringProc(GL_RENDERER));
+	const String rendering_device_vendor = String::utf8((const char *)getStringProc(GL_VENDOR));
+	print_line(vformat("Device name: %s", rendering_device_name));
+	print_line(vformat("Vendor: %s", rendering_device_vendor));
+	dlclose(handle);
+	if (rendering_device_name.contains("PowerVR") || rendering_device_vendor.contains("Imagination")) {
+		print_line("Detected Imagination GPU");
+	}
+	return true;
+}
+
 #endif // GLES3_ENABLED
-
-
 
 void RenderingNativeSurfaceAndroid::_bind_methods() {
 	ClassDB::bind_static_method("RenderingNativeSurfaceAndroid", D_METHOD("create", "window", "width", "height"), &RenderingNativeSurfaceAndroid::create_api);
@@ -134,26 +151,6 @@ RenderingContextDriver *RenderingNativeSurfaceAndroid::create_rendering_context(
 #endif
 	return nullptr;
 }
-
-bool GLManagerAndroid::validate_driver() const {
-	void *handle = dlopen("libGLESv3.so", RTLD_LOCAL);
-	if (handle == nullptr) {
-		CRASH_NOW_MSG("Unable to open libGLESv3.so");
-	}
-	PFNGLGETSTRINGPROC getStringProc = (PFNGLGETSTRINGPROC) dlsym(handle, "glGetString");
-	ERR_FAIL_COND_V_MSG(getStringProc == nullptr, false, "Unable to load glGetString symbol");
-
-	const String rendering_device_name = String::utf8((const char *)getStringProc(GL_RENDERER));
-	const String rendering_device_vendor = String::utf8((const char *)getStringProc(GL_VENDOR));
-	print_line(vformat("Device name: %s", rendering_device_name));
-	print_line(vformat("Vendor: %s", rendering_device_vendor));
-	dlclose(handle);
-	if (rendering_device_name.contains("PowerVR") || rendering_device_vendor.contains("Imagination")) {
-		print_line("Detected Imagination GPU");
-	}
-	return true;
-}
-
 
 GLManager *RenderingNativeSurfaceAndroid::create_gl_manager(const String &p_driver_name) {
 #if defined(GLES3_ENABLED)

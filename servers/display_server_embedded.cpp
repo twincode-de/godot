@@ -49,6 +49,82 @@ void DisplayServerEmbedded::set_native_surface(Ref<RenderingNativeSurface> p_nat
 	native_surface = p_native_surface;
 }
 
+void DisplayServerEmbedded::rebind_main_native_surface(Ref<RenderingNativeSurface> p_native_surface) {
+	ERR_FAIL_NULL_MSG(p_native_surface, "Native surface is null.");
+
+	if (p_native_surface == main_native_surface) {
+		print_line("DisplayServerEmbedded: main native surface unchanged, skipping rebind.");
+		return;
+	}
+
+	print_line("DisplayServerEmbedded: rebinding main native surface.");
+
+#if defined(RD_ENABLED)
+	if (rendering_context != nullptr) {
+		Ref<RenderingNativeSurface> old_surface = main_native_surface;
+		Size2i main_window_size = window_get_size(MAIN_WINDOW_ID);
+
+		if (rendering_device != nullptr) {
+			rendering_device->screen_free(MAIN_WINDOW_ID);
+		}
+
+		rendering_context->window_destroy(MAIN_WINDOW_ID);
+
+		if (old_surface.is_valid()) {
+			surface_to_window_id.erase(old_surface);
+		}
+
+		main_native_surface = p_native_surface;
+		window_surfaces[MAIN_WINDOW_ID] = p_native_surface;
+		surface_to_window_id[p_native_surface] = MAIN_WINDOW_ID;
+
+		if (rendering_context->window_create(MAIN_WINDOW_ID, p_native_surface) != OK) {
+			ERR_FAIL_MSG("Failed to recreate main native window.");
+		}
+
+		if (rendering_device != nullptr) {
+			rendering_device->screen_create(MAIN_WINDOW_ID);
+		}
+
+		resize_window(main_window_size, MAIN_WINDOW_ID);
+		print_line("DisplayServerEmbedded: main native surface rebound (RD).");
+		return;
+	}
+#endif
+
+#if defined(GLES3_ENABLED)
+	if (gl_manager != nullptr) {
+		Ref<RenderingNativeSurface> old_surface = main_native_surface;
+		Size2i main_window_size = window_get_size(MAIN_WINDOW_ID);
+
+		gl_manager->release_current();
+		gl_manager->window_destroy(MAIN_WINDOW_ID);
+
+		if (old_surface.is_valid()) {
+			surface_to_window_id.erase(old_surface);
+		}
+
+		main_native_surface = p_native_surface;
+		window_surfaces[MAIN_WINDOW_ID] = p_native_surface;
+		surface_to_window_id[p_native_surface] = MAIN_WINDOW_ID;
+
+		if (gl_manager->window_create(MAIN_WINDOW_ID, p_native_surface, 0, 0) != OK) {
+			ERR_FAIL_MSG("Failed to recreate main native window for GLES.");
+		}
+
+		gl_manager->window_make_current(MAIN_WINDOW_ID);
+		RasterizerGLES3::make_current(false);
+		current_window = MAIN_WINDOW_ID;
+
+		resize_window(main_window_size, MAIN_WINDOW_ID);
+		print_line("DisplayServerEmbedded: main native surface rebound (GLES).");
+		return;
+	}
+#endif
+
+	ERR_FAIL_MSG("Main native surface rebind requires an initialized rendering backend.");
+}
+
 void DisplayServerEmbedded::set_screen_get_dpi_callback(Callable p_callback) {
 	screen_get_dpi_callback = p_callback;
 }
@@ -67,6 +143,7 @@ void DisplayServerEmbedded::_bind_methods() {
 	ClassDB::bind_static_method("DisplayServerEmbedded", D_METHOD("set_screen_get_dpi_callback", "callback"), &DisplayServerEmbedded::set_screen_get_dpi_callback);
 	ClassDB::bind_static_method("DisplayServerEmbedded", D_METHOD("set_screen_get_size_callback", "callback"), &DisplayServerEmbedded::set_screen_get_size_callback);
 	ClassDB::bind_static_method("DisplayServerEmbedded", D_METHOD("set_screen_get_scale_callback", "callback"), &DisplayServerEmbedded::set_screen_get_scale_callback);
+	ClassDB::bind_method(D_METHOD("rebind_main_native_surface", "native_surface"), &DisplayServerEmbedded::rebind_main_native_surface);
 	ClassDB::bind_method(D_METHOD("resize_window", "size", "id"), &DisplayServerEmbedded::resize_window);
 	ClassDB::bind_method(D_METHOD("set_content_scale", "content_scale"), &DisplayServerEmbedded::set_content_scale);
 	ClassDB::bind_method(D_METHOD("touches_canceled", "idx", "window"), &DisplayServerEmbedded::touches_canceled);
@@ -78,6 +155,7 @@ DisplayServerEmbedded::DisplayServerEmbedded(const String &p_rendering_driver, W
 	ERR_FAIL_NULL_MSG(native_surface, "Native surface has not been set.");
 
 	rendering_driver = p_rendering_driver;
+	main_native_surface = native_surface;
 
 	native_menu = memnew(NativeMenu);
 

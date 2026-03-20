@@ -77,6 +77,7 @@ class DisplayServerEmbedded : public DisplayServer {
 	void perform_event(const Ref<InputEvent> &p_event);
 
 	static Ref<RenderingNativeSurface> native_surface;
+	Ref<RenderingNativeSurface> main_native_surface;
 	HashMap<WindowID, Ref<RenderingNativeSurface>> window_surfaces;
 	HashMap<Ref<RenderingNativeSurface>, WindowID> surface_to_window_id;
 	HashMap<WindowID, Size2i> window_sizes;
@@ -109,6 +110,7 @@ public:
 	static void set_screen_get_dpi_callback(Callable p_callback);
 	static void set_screen_get_size_callback(Callable p_callback);
 	static void set_screen_get_scale_callback(Callable p_callback);
+	void rebind_main_native_surface(Ref<RenderingNativeSurface> p_native_surface);
 
 	static void register_embedded_driver();
 	static DisplayServer *create_func(const String &p_rendering_driver, WindowMode p_mode, DisplayServer::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, Context p_context, int64_t p_parent_window, Error &r_error);
