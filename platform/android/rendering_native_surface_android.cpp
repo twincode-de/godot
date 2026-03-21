@@ -39,6 +39,7 @@
 
 #if defined(GLES3_ENABLED)
 #include <vector>
+#include "core/templates/hash_map.h"
 #include "servers/rendering/gl_manager.h"
 #include "servers/rendering_server.h"
 #include "drivers/egl/gl_manager_embedded_angle.h"
@@ -63,6 +64,8 @@ struct WindowData {
 
 class GLManagerAndroid : public EGLManager {
 private:
+	HashMap<DisplayServer::WindowID, Size2i> window_sizes;
+
 	virtual const char *_get_platform_extension_name() const override;
 	virtual EGLenum _get_platform_extension_enum() const override;
 	virtual EGLenum _get_platform_api_enum() const override;
@@ -70,7 +73,10 @@ private:
 	virtual Vector<EGLint> _get_platform_context_attribs() const override;
 
 public:
-	void window_resize(DisplayServer::WindowID p_window_id, int p_width, int p_height) override {}
+	Error window_create(DisplayServer::WindowID p_window_id, Ref<RenderingNativeSurface> p_native_surface, int p_width, int p_height) override;
+	void window_resize(DisplayServer::WindowID p_window_id, int p_width, int p_height) override;
+	void window_destroy(DisplayServer::WindowID p_window_id) override;
+	Size2i window_get_size(DisplayServer::WindowID p_window_id) const override;
 	bool validate_driver() const override;
 
 	GLManagerAndroid() {}
@@ -120,6 +126,41 @@ bool GLManagerAndroid::validate_driver() const {
 		print_line("Detected Imagination GPU");
 	}
 	return true;
+}
+
+Error GLManagerAndroid::window_create(DisplayServer::WindowID p_window_id, Ref<RenderingNativeSurface> p_native_surface, int p_width, int p_height) {
+	Size2i size(p_width, p_height);
+
+	Ref<RenderingNativeSurfaceAndroid> android_surface = p_native_surface;
+	if (android_surface.is_valid()) {
+		size.width = android_surface->get_width();
+		size.height = android_surface->get_height();
+
+		if ((size.width <= 0 || size.height <= 0) && android_surface->get_window() != nullptr) {
+			size.width = ANativeWindow_getWidth(android_surface->get_window());
+			size.height = ANativeWindow_getHeight(android_surface->get_window());
+		}
+	}
+
+	window_sizes.insert(p_window_id, size);
+	return EGLManager::window_create(p_window_id, p_native_surface, size.width, size.height);
+}
+
+void GLManagerAndroid::window_resize(DisplayServer::WindowID p_window_id, int p_width, int p_height) {
+	window_sizes.insert(p_window_id, Size2i(p_width, p_height));
+}
+
+void GLManagerAndroid::window_destroy(DisplayServer::WindowID p_window_id) {
+	window_sizes.erase(p_window_id);
+	EGLManager::window_destroy(p_window_id);
+}
+
+Size2i GLManagerAndroid::window_get_size(DisplayServer::WindowID p_window_id) const {
+	const Size2i *size = window_sizes.getptr(p_window_id);
+	if (size != nullptr) {
+		return *size;
+	}
+	return Size2i();
 }
 
 #endif // GLES3_ENABLED
