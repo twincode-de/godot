@@ -270,18 +270,18 @@ Ref<RenderingNativeSurfaceApple> RenderingNativeSurfaceApple::create(void *p_lay
 		CALayer* __block myLayer = nil;
 		dispatch_sync(dispatch_get_main_queue(), ^{
 #if defined(GLES3_ENABLED)
-        if (rendering_driver == "opengl3") {
+			if (rendering_driver == "opengl3") {
 #if defined(IOS_ENABLED)
-            myLayer = [[CAEAGLLayer alloc] init];
+				myLayer = [[CAEAGLLayer alloc] init];
 #elif defined(MACOS_ENABLED)
-            myLayer = [[CAOpenGLLayer alloc] init];
+				myLayer = [[CAOpenGLLayer alloc] init];
 #endif
-        }
+			} else
 #endif
-		else {
-            myLayer = [[CAMetalLayer alloc] init];
-        }
-    	});
+			{
+				myLayer = [[CAMetalLayer alloc] init];
+			}
+		});
 		if (!myLayer) {
 			return result;
 		}
