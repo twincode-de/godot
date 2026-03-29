@@ -63,6 +63,7 @@ void DisplayServerEmbedded::rebind_main_native_surface(Ref<RenderingNativeSurfac
 	if (rendering_context != nullptr) {
 		Ref<RenderingNativeSurface> old_surface = main_native_surface;
 		Size2i main_window_size = window_get_size(MAIN_WINDOW_ID);
+		VSyncMode last_vsync_mode = rendering_context->window_get_vsync_mode(MAIN_WINDOW_ID);
 
 		if (rendering_device != nullptr) {
 			rendering_device->screen_free(MAIN_WINDOW_ID);
@@ -81,6 +82,8 @@ void DisplayServerEmbedded::rebind_main_native_surface(Ref<RenderingNativeSurfac
 		if (rendering_context->window_create(MAIN_WINDOW_ID, p_native_surface) != OK) {
 			ERR_FAIL_MSG("Failed to recreate main native window.");
 		}
+
+		rendering_context->window_set_vsync_mode(MAIN_WINDOW_ID, last_vsync_mode);
 
 		if (rendering_device != nullptr) {
 			rendering_device->screen_create(MAIN_WINDOW_ID);
