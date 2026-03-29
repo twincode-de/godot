@@ -2856,13 +2856,13 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 		for (uint32_t i = 0; i < presented_swapchains.size(); i++) {
 			SwapChain *swap_chain = presented_swapchains[i];
 			swap_chain->set_image_index(UINT_MAX);
-			if (results[i] == VK_ERROR_OUT_OF_DATE_KHR) {
+			if (results[i] == VK_ERROR_OUT_OF_DATE_KHR || results[i] == VK_ERROR_SURFACE_LOST_KHR) {
 				context_driver->surface_set_needs_resize(swap_chain->get_surface(), true);
 				any_result_is_out_of_date = true;
 			}
 		}
 
-		if (any_result_is_out_of_date || err == VK_ERROR_OUT_OF_DATE_KHR) {
+		if (any_result_is_out_of_date || err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_ERROR_SURFACE_LOST_KHR) {
 			// It is possible for presentation to fail with out of date while acquire might've succeeded previously. This case
 			// will be considered a silent failure as it can be triggered easily by resizing a window in the OS natively.
 			return FAILED;
@@ -3788,12 +3788,13 @@ RDD::FramebufferID RenderingDeviceDriverVulkan::PresentableSwapChain::acquire_fr
 	command_queues_acquired_semaphores.push_back(semaphore_index);
 
 	err = device_driver->device_functions.AcquireNextImageKHR(device_driver->vk_device, vk_swapchain, UINT64_MAX, semaphore, VK_NULL_HANDLE, &image_index);
-	if (err == VK_ERROR_OUT_OF_DATE_KHR) {
-		// Out of date leaves the semaphore in a signaled state that will never finish, so it's necessary to recreate it.
+	if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_ERROR_SURFACE_LOST_KHR) {
+		// A lost or out-of-date surface leaves this frame unusable, so recreate the semaphore before retrying.
 		bool semaphore_recreated = device_driver->_recreate_image_semaphore(p_command_queue, semaphore_index, true);
 		ERR_FAIL_COND_V(!semaphore_recreated, FramebufferID());
 
-		// Swap chain is out of date and must be recreated.
+		// The swap chain must be recreated after the host provides a valid surface again.
+		device_driver->context_driver->surface_set_needs_resize(surface, true);
 		r_resize_required = true;
 		return FramebufferID();
 	} else if (err != VK_SUCCESS && err != VK_SUBOPTIMAL_KHR) {
