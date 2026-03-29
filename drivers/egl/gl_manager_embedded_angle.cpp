@@ -71,4 +71,26 @@ Vector<EGLint> GLManagerANGLE_Embedded::_get_platform_context_attribs() const {
 	return ret;
 }
 
+Error GLManagerANGLE_Embedded::window_create(DisplayServer::WindowID p_window_id, Ref<RenderingNativeSurface> p_native_surface, int p_width, int p_height) {
+	window_sizes.insert(p_window_id, Size2i(p_width, p_height));
+	return EGLManager::window_create(p_window_id, p_native_surface, p_width, p_height);
+}
+
+void GLManagerANGLE_Embedded::window_resize(DisplayServer::WindowID p_window_id, int p_width, int p_height) {
+	window_sizes.insert(p_window_id, Size2i(p_width, p_height));
+}
+
+void GLManagerANGLE_Embedded::window_destroy(DisplayServer::WindowID p_window_id) {
+	window_sizes.erase(p_window_id);
+	EGLManager::window_destroy(p_window_id);
+}
+
+Size2i GLManagerANGLE_Embedded::window_get_size(DisplayServer::WindowID p_window_id) const {
+	const Size2i *size = window_sizes.getptr(p_window_id);
+	if (size != nullptr) {
+		return *size;
+	}
+	return Size2i();
+}
+
 #endif // GLES3_ENABLED

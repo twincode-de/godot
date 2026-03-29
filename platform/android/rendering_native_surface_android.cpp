@@ -45,6 +45,9 @@
 #include "drivers/egl/gl_manager_embedded_angle.h"
 #include <android/native_window.h>
 #include <EGL/egl.h>
+#if defined(ANGLE_ENABLED)
+#include <EGL/eglext_angle.h>
+#endif
 #include <GLES3/gl3.h>
 #include <dlfcn.h>
 
@@ -83,6 +86,70 @@ public:
 	~GLManagerAndroid() {}
 };
 
+class GLManagerANGLE_Android : public GLManagerANGLE_Embedded {
+private:
+	EGLAttrib active_backend_type = EGL_PLATFORM_ANGLE_TYPE_DEFAULT_ANGLE;
+	virtual Vector<EGLAttrib> _get_platform_display_attributes() const override;
+
+public:
+	Error initialize(void *p_native_display = nullptr) override;
+	Error window_create(DisplayServer::WindowID p_window_id, Ref<RenderingNativeSurface> p_native_surface, int p_width, int p_height) override;
+	bool validate_driver() const override;
+
+	GLManagerANGLE_Android() {}
+	~GLManagerANGLE_Android() {}
+};
+
+static Size2i get_android_surface_size(const Ref<RenderingNativeSurface> &p_native_surface, int p_width, int p_height) {
+	Size2i size(p_width, p_height);
+
+	Ref<RenderingNativeSurfaceAndroid> android_surface = p_native_surface;
+	if (android_surface.is_valid()) {
+		size.width = android_surface->get_width();
+		size.height = android_surface->get_height();
+
+		if ((size.width <= 0 || size.height <= 0) && android_surface->get_window() != nullptr) {
+			size.width = ANativeWindow_getWidth(android_surface->get_window());
+			size.height = ANativeWindow_getHeight(android_surface->get_window());
+		}
+	}
+
+	return size;
+}
+
+static bool validate_android_driver(const char *p_library_name) {
+	void *handle = dlopen(p_library_name, RTLD_LOCAL);
+	if (handle == nullptr) {
+		CRASH_NOW_MSG(vformat("Unable to open %s", p_library_name));
+	}
+	PFNGLGETSTRINGPROC get_string_proc = (PFNGLGETSTRINGPROC)dlsym(handle, "glGetString");
+	ERR_FAIL_COND_V_MSG(get_string_proc == nullptr, false, "Unable to load glGetString symbol");
+
+	const String rendering_device_name = String::utf8((const char *)get_string_proc(GL_RENDERER));
+	const String rendering_device_vendor = String::utf8((const char *)get_string_proc(GL_VENDOR));
+	print_line(vformat("Device name: %s", rendering_device_name));
+	print_line(vformat("Vendor: %s", rendering_device_vendor));
+	dlclose(handle);
+	if (rendering_device_name.contains("PowerVR") || rendering_device_vendor.contains("Imagination")) {
+		print_line("Detected Imagination GPU");
+	}
+	return true;
+}
+
+static Vector<EGLAttrib> get_android_angle_display_attributes_for_backend_type(EGLAttrib p_backend_type) {
+	Vector<EGLAttrib> ret;
+	ret.push_back(EGL_PLATFORM_ANGLE_TYPE_ANGLE);
+	ret.push_back(p_backend_type);
+	if (p_backend_type == EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE) {
+		ret.push_back(EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE);
+		ret.push_back(EGL_PLATFORM_ANGLE_DEVICE_TYPE_HARDWARE_ANGLE);
+	}
+	ret.push_back(EGL_PLATFORM_ANGLE_NATIVE_PLATFORM_TYPE_ANGLE);
+	ret.push_back(EGL_PLATFORM_ANDROID_KHR);
+	ret.push_back(EGL_NONE);
+	return ret;
+}
+
 const char *GLManagerAndroid::_get_platform_extension_name() const {
 	return "EGL_KHR_platform_android";
 }
@@ -110,38 +177,11 @@ Vector<EGLint> GLManagerAndroid::_get_platform_context_attribs() const {
 }
 
 bool GLManagerAndroid::validate_driver() const {
-	void *handle = dlopen("libGLESv3.so", RTLD_LOCAL);
-	if (handle == nullptr) {
-		CRASH_NOW_MSG("Unable to open libGLESv3.so");
-	}
-	PFNGLGETSTRINGPROC getStringProc = (PFNGLGETSTRINGPROC)dlsym(handle, "glGetString");
-	ERR_FAIL_COND_V_MSG(getStringProc == nullptr, false, "Unable to load glGetString symbol");
-
-	const String rendering_device_name = String::utf8((const char *)getStringProc(GL_RENDERER));
-	const String rendering_device_vendor = String::utf8((const char *)getStringProc(GL_VENDOR));
-	print_line(vformat("Device name: %s", rendering_device_name));
-	print_line(vformat("Vendor: %s", rendering_device_vendor));
-	dlclose(handle);
-	if (rendering_device_name.contains("PowerVR") || rendering_device_vendor.contains("Imagination")) {
-		print_line("Detected Imagination GPU");
-	}
-	return true;
+	return validate_android_driver("libGLESv3.so");
 }
 
 Error GLManagerAndroid::window_create(DisplayServer::WindowID p_window_id, Ref<RenderingNativeSurface> p_native_surface, int p_width, int p_height) {
-	Size2i size(p_width, p_height);
-
-	Ref<RenderingNativeSurfaceAndroid> android_surface = p_native_surface;
-	if (android_surface.is_valid()) {
-		size.width = android_surface->get_width();
-		size.height = android_surface->get_height();
-
-		if ((size.width <= 0 || size.height <= 0) && android_surface->get_window() != nullptr) {
-			size.width = ANativeWindow_getWidth(android_surface->get_window());
-			size.height = ANativeWindow_getHeight(android_surface->get_window());
-		}
-	}
-
+	Size2i size = get_android_surface_size(p_native_surface, p_width, p_height);
 	window_sizes.insert(p_window_id, size);
 	return EGLManager::window_create(p_window_id, p_native_surface, size.width, size.height);
 }
@@ -161,6 +201,99 @@ Size2i GLManagerAndroid::window_get_size(DisplayServer::WindowID p_window_id) co
 		return *size;
 	}
 	return Size2i();
+}
+
+Error GLManagerANGLE_Android::window_create(DisplayServer::WindowID p_window_id, Ref<RenderingNativeSurface> p_native_surface, int p_width, int p_height) {
+	Size2i size = get_android_surface_size(p_native_surface, p_width, p_height);
+	return GLManagerANGLE_Embedded::window_create(p_window_id, p_native_surface, size.width, size.height);
+}
+
+Vector<EGLAttrib> GLManagerANGLE_Android::_get_platform_display_attributes() const {
+	return get_android_angle_display_attributes_for_backend_type(active_backend_type);
+}
+
+Error GLManagerANGLE_Android::initialize(void *p_native_display) {
+#if defined(GLAD_ENABLED) && !defined(EGL_STATIC)
+	void *handle = dlopen("libEGL_angle.so", RTLD_NOW | RTLD_LOCAL);
+	ERR_FAIL_NULL_V_MSG(handle, ERR_UNAVAILABLE, vformat("Can't load ANGLE EGL dynamic library: %s", dlerror()));
+
+	PFNEGLGETPROCADDRESSPROC get_proc_address = (PFNEGLGETPROCADDRESSPROC)dlsym(handle, "eglGetProcAddress");
+	ERR_FAIL_NULL_V_MSG(get_proc_address, ERR_UNAVAILABLE, "Can't load eglGetProcAddress from ANGLE EGL library.");
+
+	PFNEGLGETPLATFORMDISPLAYPROC get_platform_display = (PFNEGLGETPLATFORMDISPLAYPROC)dlsym(handle, "eglGetPlatformDisplay");
+	if (get_platform_display == nullptr) {
+		get_platform_display = (PFNEGLGETPLATFORMDISPLAYPROC)get_proc_address("eglGetPlatformDisplay");
+	}
+
+	PFNEGLGETPLATFORMDISPLAYEXTPROC get_platform_display_ext = (PFNEGLGETPLATFORMDISPLAYEXTPROC)dlsym(handle, "eglGetPlatformDisplayEXT");
+	if (get_platform_display_ext == nullptr) {
+		get_platform_display_ext = (PFNEGLGETPLATFORMDISPLAYEXTPROC)get_proc_address("eglGetPlatformDisplayEXT");
+	}
+	ERR_FAIL_COND_V_MSG(get_platform_display == nullptr && get_platform_display_ext == nullptr, ERR_UNAVAILABLE, "ANGLE EGL platform display entry points are unavailable.");
+
+	PFNEGLINITIALIZEPROC initialize_proc = (PFNEGLINITIALIZEPROC)dlsym(handle, "eglInitialize");
+	PFNEGLTERMINATEPROC terminate_proc = (PFNEGLTERMINATEPROC)dlsym(handle, "eglTerminate");
+	ERR_FAIL_NULL_V_MSG(initialize_proc, ERR_UNAVAILABLE, "Can't load eglInitialize from ANGLE EGL library.");
+
+	EGLNativeDisplayType native_display = EGL_DEFAULT_DISPLAY;
+
+	Vector<EGLAttrib> backend_attempts;
+	backend_attempts.push_back(EGL_PLATFORM_ANGLE_TYPE_DEFAULT_ANGLE);
+	backend_attempts.push_back(EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE);
+
+	EGLDisplay tmp_display = EGL_NO_DISPLAY;
+
+	for (int i = 0; i < backend_attempts.size(); i++) {
+		const EGLAttrib backend_type = backend_attempts[i];
+		Vector<EGLAttrib> attribs = get_android_angle_display_attributes_for_backend_type(backend_type);
+		Vector<EGLint> attribs_ext;
+		for (const EGLAttrib &attrib : attribs) {
+			attribs_ext.push_back((EGLint)attrib);
+		}
+
+		if (get_platform_display_ext != nullptr) {
+			tmp_display = get_platform_display_ext(EGL_PLATFORM_ANGLE_ANGLE, native_display, attribs_ext.ptr());
+		} else {
+			tmp_display = get_platform_display(EGL_PLATFORM_ANGLE_ANGLE, native_display, attribs.ptr());
+		}
+		if (tmp_display == EGL_NO_DISPLAY) {
+			continue;
+		}
+
+		if (initialize_proc(tmp_display, nullptr, nullptr)) {
+			active_backend_type = backend_type;
+			break;
+		}
+
+		if (terminate_proc != nullptr) {
+			terminate_proc(tmp_display);
+		}
+		tmp_display = EGL_NO_DISPLAY;
+	}
+
+	ERR_FAIL_COND_V_MSG(tmp_display == EGL_NO_DISPLAY, ERR_UNAVAILABLE, "Can't initialize the initial ANGLE EGL display.");
+
+	int version = gladLoaderLoadEGL(tmp_display);
+	if (terminate_proc != nullptr) {
+		terminate_proc(tmp_display);
+	}
+	if (!version) {
+		ERR_FAIL_V_MSG(ERR_UNAVAILABLE, "Can't load ANGLE EGL dynamic library.");
+	}
+
+	int major = GLAD_VERSION_MAJOR(version);
+	int minor = GLAD_VERSION_MINOR(version);
+
+	ERR_FAIL_COND_V_MSG(!GLAD_EGL_VERSION_1_4, ERR_UNAVAILABLE, vformat("EGL version is too old! %d.%d < 1.4", major, minor));
+#endif
+
+	return OK;
+}
+
+bool GLManagerANGLE_Android::validate_driver() const {
+	// ANGLE's GLES entry points can crash when probed directly via dlsym/glGetString
+	// during driver validation, even though context creation succeeded.
+	return true;
 }
 
 #endif // GLES3_ENABLED
@@ -213,7 +346,7 @@ GLManager *RenderingNativeSurfaceAndroid::create_gl_manager(const String &p_driv
 			gladSetupEGL(1, EGL_NAMES);
 			gladSetupGLES2(1, GL_NAMES);
 		#endif
-		return memnew(GLManagerANGLE_Embedded);
+		return memnew(GLManagerANGLE_Android);
 	}
 	#endif
 #endif

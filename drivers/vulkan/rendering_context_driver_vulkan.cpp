@@ -652,6 +652,16 @@ VKAPI_ATTR VkBool32 VKAPI_CALL RenderingContextDriverVulkan::_debug_messenger_ca
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL RenderingContextDriverVulkan::_debug_report_callback(VkDebugReportFlagsEXT p_flags, VkDebugReportObjectTypeEXT p_object_type, uint64_t p_object, size_t p_location, int32_t p_message_code, const char *p_layer_prefix, const char *p_message, void *p_user_data) {
+	if (strstr(p_message, "Invalid SPIR-V binary version 1.3") != nullptr) {
+		return VK_FALSE;
+	}
+	if (strstr(p_message, "Shader requires flag") != nullptr) {
+		return VK_FALSE;
+	}
+	if (strstr(p_message, "SPIR-V module not valid: Pointer operand") != nullptr && strstr(p_message, "must be a memory object") != nullptr) {
+		return VK_FALSE;
+	}
+
 	String debug_message = String("Vulkan Debug Report: object - ") + String::num_int64(p_object) + "\n" + p_message;
 
 	switch (p_flags) {

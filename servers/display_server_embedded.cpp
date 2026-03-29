@@ -99,6 +99,7 @@ void DisplayServerEmbedded::rebind_main_native_surface(Ref<RenderingNativeSurfac
 	if (gl_manager != nullptr) {
 		Ref<RenderingNativeSurface> old_surface = main_native_surface;
 		Size2i main_window_size = window_get_size(MAIN_WINDOW_ID);
+		bool last_use_vsync = gl_manager->is_using_vsync();
 
 		gl_manager->release_current();
 		gl_manager->window_destroy(MAIN_WINDOW_ID);
@@ -116,6 +117,7 @@ void DisplayServerEmbedded::rebind_main_native_surface(Ref<RenderingNativeSurfac
 		}
 
 		gl_manager->window_make_current(MAIN_WINDOW_ID);
+		gl_manager->set_use_vsync(last_use_vsync);
 		RasterizerGLES3::make_current(false);
 		current_window = MAIN_WINDOW_ID;
 

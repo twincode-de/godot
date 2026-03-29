@@ -33,6 +33,7 @@
 
 #if defined(GLES3_ENABLED) && defined(ANGLE_ENABLED)
 
+#include "core/templates/hash_map.h"
 #include "core/error/error_list.h"
 #include "core/os/os.h"
 #include "core/templates/local_vector.h"
@@ -41,6 +42,8 @@
 
 class GLManagerANGLE_Embedded : public EGLManager {
 private:
+	HashMap<DisplayServer::WindowID, Size2i> window_sizes;
+
 	virtual const char *_get_platform_extension_name() const override;
 	virtual EGLenum _get_platform_extension_enum() const override;
 	virtual EGLenum _get_platform_api_enum() const override;
@@ -48,7 +51,10 @@ private:
 	virtual Vector<EGLint> _get_platform_context_attribs() const override;
 
 public:
-	void window_resize(DisplayServer::WindowID p_window_id, int p_width, int p_height) override {}
+	Error window_create(DisplayServer::WindowID p_window_id, Ref<RenderingNativeSurface> p_native_surface, int p_width, int p_height) override;
+	void window_resize(DisplayServer::WindowID p_window_id, int p_width, int p_height) override;
+	void window_destroy(DisplayServer::WindowID p_window_id) override;
+	Size2i window_get_size(DisplayServer::WindowID p_window_id) const override;
 
 	GLManagerANGLE_Embedded() {}
 	~GLManagerANGLE_Embedded() {}
